@@ -18,12 +18,17 @@ const byte feedTime[][2] = {
   {12,5},
 };
 
+const int enPin = 8;
+const int resPin = 9;
+const int slpPin = 10;
+const int stepPin = 11;
+const int dirPin = 12;
+
 #define EE_RESET 12         // любое число 0-255. Измени, чтобы сбросить настройки и обновить время
-#define FEED_SPEED 3000     // задержка между шагами мотора (мкс)
+#define FEED_SPEED 1000     // задержка между шагами мотора (мкс)
 #define BTN_PIN 7           // кнопка
-#define STEPS_FRW 19        // шаги вперёд
-#define STEPS_BKW 12        // шаги назад
-//const byte drvPins[] = {8, 9, 10, 11};  // драйвер (фазаА1, фазаА2, фазаВ1, фазаВ2)
+#define STEPS_FRW 25        // шаги вперёд
+#define STEPS_BKW 10        // шаги назад
 
 // =========================================================
 #include <EEPROM.h>
@@ -35,10 +40,20 @@ RtcDS1302<ThreeWire> rtc(myWire);
 
 #include "EncButton.h"
 EncButton<EB_TICK, BTN_PIN> btn;
-int feedAmount = 100;
+int feedAmount = 1;
 
 void setup() {
-  Serial.begin(9600);
+  
+  pinMode(enPin, OUTPUT);
+  pinMode(resPin, OUTPUT);
+  pinMode(slpPin, OUTPUT);
+  pinMode(stepPin, OUTPUT);
+  pinMode(dirPin, OUTPUT);
+
+  digitalWrite(enPin, HIGH);
+  digitalWrite(resPin, HIGH);
+  digitalWrite(slpPin, HIGH);
+
   rtc.Begin();
   
 //  if (EEPROM.read(0) != EE_RESET) {   // первый запуск
@@ -60,76 +75,55 @@ void loop() {
   if (millis() - tmr > 500) {           // два раза в секунду
     static byte prevMin = 0;
     tmr = millis();
-//    DateTime now = rtc.getTime();
     RtcDateTime now = rtc.GetDateTime();
     if (prevMin != now.Minute()) {
       prevMin = now.Minute();
       for (byte i = 0; i < sizeof(feedTime) / 2; i++)    // для всего расписания
-//       if (feedTime[i][0] == now.Hour() && feedTime[i][1] == now.Minute()) feed();
-        if (feedTime[i][0] == now.Hour() && feedTime[i][1] == now.Minute()){ 
-          printDateTime(now);
-          Serial.println();        
-        }
+       if (feedTime[i][0] == now.Hour() && feedTime[i][1] == now.Minute()) feed();
     }
   }
 
   btn.tick();
-//  if (btn.click()) feed();
-  if (btn.click()) {
-    RtcDateTime now = rtc.GetDateTime();
-    printDateTime(now);
-    Serial.println();
+  if (btn.click()) feed();
+
+  if (btn.hold()) {
+    int newAmount = 0;
+    while (btn.isHold()) {
+      btn.tick();
+      enableMotor();
+      oneRev();
+      newAmount++;
+    }
+    disableMotor();
+    feedAmount = newAmount;
+    EEPROM.put(1, feedAmount);
   }
-//
-//  if (btn.hold()) {
-//    int newAmount = 0;
-//    while (btn.isHold()) {
-//      btn.tick();
-//      oneRev();
-//      newAmount++;
-//    }
-//    disableMotor();
-//    feedAmount = newAmount;
-//    EEPROM.put(1, feedAmount);
-//  }
 }
 
-#define countof(a) (sizeof(a) / sizeof(a[0]))
-
-void printDateTime(const RtcDateTime& dt)
-{
-    char datestring[20];
-
-    snprintf_P(datestring, 
-            countof(datestring),
-            PSTR("%02u/%02u/%04u %02u:%02u:%02u"),
-            dt.Month(),
-            dt.Day(),
-            dt.Year(),
-            dt.Hour(),
-            dt.Minute(),
-            dt.Second() );
-    Serial.print(datestring);
+void feed() {
+  enableMotor();
+  for (int i = 0; i < feedAmount; i++) oneRev();
+  disableMotor();
 }
-//void feed() {
-//  for (int i = 0; i < feedAmount; i++) oneRev();
-//  disableMotor();
-//}
 
-// выключаем ток на мотор
-//void disableMotor() {
-//  for (byte i = 0; i < 4; i++) digitalWrite(drvPins[i], 0);
-//}
-//
-//void oneRev() {
-//  for (int i = 0; i < STEPS_BKW; i++) runMotor(-1);
-//  for (int i = 0; i < STEPS_FRW; i++) runMotor(1);
-//}
-//
-//const byte steps[] = {0b1010, 0b0110, 0b0101, 0b1001};
-//void runMotor(int8_t dir) {
-//  static byte step = 0;
-//  for (byte i = 0; i < 4; i++) digitalWrite(drvPins[i], bitRead(steps[step & 0b11], i));
-//  delayMicroseconds(FEED_SPEED);
-//  step += dir;
-//}
+void enableMotor() {
+  digitalWrite(enPin, LOW);
+}
+
+void disableMotor() {
+  digitalWrite(enPin, HIGH);
+}
+
+void oneRev() {
+  for (int i = 0; i < STEPS_BKW; i++) runMotor(1);
+  for (int i = 0; i < STEPS_FRW; i++) runMotor(0);
+}
+
+void runMotor(int8_t dir) {
+  digitalWrite(dirPin, dir);
+  
+  digitalWrite(stepPin, HIGH);
+  delayMicroseconds(FEED_SPEED);
+  digitalWrite(stepPin, LOW);
+  delayMicroseconds(FEED_SPEED);
+}
