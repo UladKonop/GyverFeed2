@@ -67,7 +67,6 @@ void setup() {
 //    rtc.setTime(BUILD_SEC, BUILD_MIN, BUILD_HOUR, BUILD_DAY, BUILD_MONTH, BUILD_YEAR);
 //  }
 //  EEPROM.get(1, feedAmount);
-//  for (byte i = 0; i < 4; i++) pinMode(drvPins[i], OUTPUT);   // пины выходы
 }
 
 void loop() {
